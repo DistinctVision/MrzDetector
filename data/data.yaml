@@ -2,3 +2,13 @@ datasets:
   coco:
     train_directory: D:\\datasets\\coco\\train
     val_directory: D:\\datasets\\coco\\val
+
+  temp_directory: temp
+
+model:
+  input_image_size:
+    width: 640
+    height: 480
+  mzt_code_image_size:
+    width: 490
+    height: 60

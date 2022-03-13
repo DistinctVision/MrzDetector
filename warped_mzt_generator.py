@@ -1,17 +1,21 @@
-from typing import Tuple, Union, Iterable
+from typing import Tuple, Union, Iterable, Optional, List
 from pathlib import Path
 import os
 import random
 import numpy as np
 import cv2
 
+from tqdm import tqdm
+
 from transform import get_camera_matrix, get_look_transform, remove_z_axis, get_fit_transformed_image_matrix, \
-    get_affine_fit_image_matrix
+    get_affine_fit_image_matrix, matrix_to_image_corners, normalize_image_corners, denormalize_image_corners
+from mzt_transform_dataset_reader import MztTransformDatasetReader
 
 
 class WarpedMztGenerator(Iterable):
     def __init__(self,
                  dataset_directory_path: Union[Path, str],
+                 mode: str = 'matrix',
                  input_image_size: Tuple[int, int] = (640, 480),
                  mzt_code_image_size: Tuple[int, int] = (490, 60),
                  limit_angles: Tuple[float, float, float] = (60, 60, 30),
@@ -19,7 +23,10 @@ class WarpedMztGenerator(Iterable):
                  distance_range: Tuple[float, float] = (100, 1500),
                  ext_scale_range: Tuple[float, float] = (-0.1, 0.1)):
         dataset_directory_path = Path(dataset_directory_path).absolute()
-        assert dataset_directory_path.is_dir()
+        assert dataset_directory_path.is_dir(), f'Invalid path: {dataset_directory_path}'
+        assert mode in {'matrix', 'corners'}, f'Invalid mode: {mode}'
+
+        self.mode = mode
 
         self._mzt_code_image_size = mzt_code_image_size[:2]
         self._input_image_size = input_image_size[:2]
@@ -45,7 +52,7 @@ class WarpedMztGenerator(Iterable):
     def __iter__(self):
         return self
 
-    def __next__(self) -> Tuple[np.ndarray, np.ndarray]:
+    def __next__(self) -> Union[Tuple[np.ndarray, np.ndarray], Tuple[np.ndarray, List[Tuple[float, float]]]]:
         self._iter_index += 1
         if self._iter_index >= len(self._image_paths):
             raise StopIteration
@@ -54,7 +61,8 @@ class WarpedMztGenerator(Iterable):
     def __len__(self) -> int:
         return len(self._image_paths)
 
-    def __getitem__(self, index: int) -> Tuple[np.ndarray, np.ndarray]:
+    def __getitem__(self, index: int) -> Union[Tuple[np.ndarray, np.ndarray],
+                                               Tuple[np.ndarray, List[Tuple[float, float]]]]:
         background = cv2.imread(str(self._image_paths[index]))
         fit_matrix = get_affine_fit_image_matrix((background.shape[1], background.shape[0]),
                                                  self._input_image_size)
@@ -72,7 +80,11 @@ class WarpedMztGenerator(Iterable):
         image = cv2.warpPerspective(mzt_code_image, transform_matrix, self._input_image_size,
                                     dst=background, borderMode=cv2.BORDER_TRANSPARENT)
 
-        return image, transform_matrix
+        labels = transform_matrix
+        if self.mode == 'corners':
+            labels = matrix_to_image_corners(transform_matrix, self._mzt_code_image_size)
+            labels = normalize_image_corners(labels, self.input_image_size)
+        return image, labels
 
     def _generate_mzt_code_image(self,
                                  border: Union[int, Tuple[int, int]] = (15, 5)) -> np.ndarray:
@@ -102,7 +114,37 @@ class WarpedMztGenerator(Iterable):
         return T
 
 
-if __name__ == '__main__':
+def prepare_dataset(input_dataset_path: Union[Path, str],
+                    output_dataset_path: Union[Path, str],
+                    input_image_size: Tuple[int, int],
+                    mzt_code_image_size: Tuple[int, int]) -> MztTransformDatasetReader:
+    input_dataset_path = Path(input_dataset_path)
+    output_dataset_path = Path(output_dataset_path)
+    if output_dataset_path.exists():
+        return MztTransformDatasetReader(output_dataset_path)
+    output_dataset_path.mkdir(parents=True, exist_ok=True)
+
+    generator = WarpedMztGenerator(input_dataset_path,
+                                   mode='corners',
+                                   input_image_size=input_image_size,
+                                   mzt_code_image_size=mzt_code_image_size)
+
+    for index, (image, corners) in enumerate(tqdm(generator, f'The dataset preparing: {input_dataset_path}')):
+        image_name = f'image_{index}'
+        image_path = output_dataset_path / f'{image_name}.jpg'
+        labels_path = output_dataset_path / f'{image_name}.txt'
+        cv2.imwrite(str(image_path), image)
+        with open(labels_path, 'w') as labels_file:
+            labels_str = f'{corners[0][0]} {corners[0][1]} ' \
+                         f'{corners[1][0]} {corners[1][1]} ' \
+                         f'{corners[2][0]} {corners[2][1]} ' \
+                         f'{corners[3][0]} {corners[3][1]}'
+            labels_file.write(labels_str)
+
+    return MztTransformDatasetReader(output_dataset_path)
+
+
+def main_show():
     import yaml
 
     from transform import matrix_to_image_corners, image_corners_to_matrix
@@ -110,21 +152,61 @@ if __name__ == '__main__':
     with open(Path('data') / 'data.yaml', 'r') as stream:
         data_config = yaml.safe_load(stream)
 
-    generator = WarpedMztGenerator(data_config['datasets']['coco']['train_directory'])
+    generator = WarpedMztGenerator(data_config['datasets']['coco']['train_directory'],
+                                   mode='matrix',
+                                   input_image_size=(data_config['model']['input_image_size']['width'],
+                                                     data_config['model']['input_image_size']['height']),
+                                   mzt_code_image_size=(data_config['model']['mzt_code_image_size']['width'],
+                                                        data_config['model']['mzt_code_image_size']['height']))
 
     for image, matrix in generator:
-
         matrix /= matrix[2, 2]
         image_corners = matrix_to_image_corners(matrix, generator.mzt_code_image_size)
         matrix1 = image_corners_to_matrix(image_corners, generator.mzt_code_image_size)
         matrix = matrix1
 
-        output_image = cv2.warpPerspective(image, np.linalg.inv(matrix), generator.mzt_code_image_size)
+        unwarped_image = cv2.warpPerspective(image, np.linalg.inv(matrix), generator.mzt_code_image_size)
 
         for i in range(4):
             c_a, c_b = image_corners[i], image_corners[(i + 1) % 4]
             cv2.line(image, (int(c_a[0]), int(c_a[1])), (int(c_b[0]), int(c_b[1])), (0, 255, 0), 2)
         cv2.imshow('input', image)
 
-        cv2.imshow('unwarped', output_image)
+        cv2.imshow('unwarped', unwarped_image)
         cv2.waitKey(-1)
+
+
+def main_prepare():
+    import yaml
+    from transform import image_corners_to_matrix
+
+    with open(Path('data') / 'data.yaml', 'r') as stream:
+        data_config = yaml.safe_load(stream)
+
+    input_image_size = (data_config['model']['input_image_size']['width'],
+                        data_config['model']['input_image_size']['height'])
+    mzt_code_image_size = (data_config['model']['mzt_code_image_size']['width'],
+                           data_config['model']['mzt_code_image_size']['height'])
+
+    reader = prepare_dataset(data_config['datasets']['coco']['val_directory'],
+                             data_config['datasets']['temp_directory'],
+                             input_image_size=input_image_size,
+                             mzt_code_image_size=mzt_code_image_size)
+    for image, image_corners in reader:
+        image_corners = denormalize_image_corners(image_corners, input_image_size)
+        matrix = image_corners_to_matrix(image_corners, mzt_code_image_size)
+
+        unwarped_image = cv2.warpPerspective(image, np.linalg.inv(matrix), mzt_code_image_size)
+
+        for i in range(4):
+            c_a, c_b = image_corners[i], image_corners[(i + 1) % 4]
+            cv2.line(image, (int(c_a[0]), int(c_a[1])), (int(c_b[0]), int(c_b[1])), (0, 255, 0), 2)
+        cv2.imshow('input', image)
+
+        cv2.imshow('unwarped', unwarped_image)
+        cv2.waitKey(-1)
+
+
+if __name__ == '__main__':
+    main_prepare()
+    # main_show()
