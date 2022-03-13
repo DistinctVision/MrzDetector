@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple, List
 import sys
 import math
 import numpy as np
@@ -35,7 +35,7 @@ def get_roll_rotation(roll: float) -> np.ndarray:
                       [0, 0, 1]])
 
 
-def plane_slice(M: np.ndarray) -> np.ndarray:
+def remove_z_axis(M: np.ndarray) -> np.ndarray:
     return np.stack([M[:3, 0], M[:3, 1], M[:3, 3]])
 
 
@@ -97,3 +97,58 @@ def get_fit_transformed_image_matrix(input_image_size: Tuple[int, int],
     offset = (offset[0] + borders[0] * 0.5, offset[1] + borders[1] * 0.5)
 
     return np.array([[scale, 0, offset[0]], [0, scale, offset[1]], [0, 0, 1]], float)
+
+
+def normalize_image_corners(image_corners: List[Tuple[float, float]],
+                            image_size: Tuple[int, int]) -> List[Tuple[float, float]]:
+    return [(c[0] / image_size[0], c[1] / image_size[1]) for c in image_corners]
+
+
+def denormalize_image_corners(normalized_image_corners: List[Tuple[float, float]],
+                              image_size: Tuple[int, int]) -> List[Tuple[float, float]]:
+    return [(c[0] * image_size[0], c[1] * image_size[1]) for c in normalized_image_corners]
+
+
+def matrix_to_image_corners(matrix: np.ndarray, input_image_size: Tuple[int, int]) -> List[Tuple[float, float]]:
+    corners = [np.dot(matrix, [c[0], c[1], 1]) for c in [(0, 0),
+                                                         (input_image_size[0], 0),
+                                                         (input_image_size[0], input_image_size[1]),
+                                                         (0, input_image_size[1])]]
+    return [(c[0] / c[2], c[1] / c[2]) for c in corners]
+
+
+def image_corners_to_matrix(image_corners: List[Tuple[float, float]], input_image_size: Tuple[int, int]) -> np.ndarray:
+    """
+    This is a implementation of DLT-algorithm: getting the transformation matrix from input / output coordinates.
+    :param image_corners: output image corners after the perspective transformation
+    :param input_image_size: the size of the input image
+    :return: calculated transformation
+    """
+
+    assert len(image_corners) == 4
+
+    input_image_corners = [(0, 0), (input_image_size[0], 0),
+                           (input_image_size[0], input_image_size[1]), (0, input_image_size[1])]
+
+    matrix_a_data = []
+    for output_image_corner, input_image_corner in zip(image_corners, input_image_corners):
+        matrix_a_data.append([input_image_corner[0], input_image_corner[1], 1,
+                              0, 0, 0,
+                              - input_image_corner[0] * output_image_corner[0],
+                              - input_image_corner[1] * output_image_corner[0],
+                              - output_image_corner[0]])
+        matrix_a_data.append([0, 0, 0,
+                              input_image_corner[0], input_image_corner[1], 1,
+                              - input_image_corner[0] * output_image_corner[1],
+                              - input_image_corner[1] * output_image_corner[1],
+                              - output_image_corner[1]])
+    matrix_a_data.append([0, 0, 0, 0, 0, 0, 0, 0, 0])
+
+    u, w, vt = np.linalg.svd(np.array(matrix_a_data, float), False, True)
+    h_vec = vt[-1, :]
+    h = np.array([[h_vec[0], h_vec[1], h_vec[2]],
+                  [h_vec[3], h_vec[4], h_vec[5]],
+                  [h_vec[6], h_vec[7], h_vec[8]]], float)
+    h /= h[2, 2]
+    return h
+
