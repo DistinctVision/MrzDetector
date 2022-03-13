@@ -55,14 +55,22 @@ def get_look_transform(angles: Tuple[float, float, float], distance: float) -> n
     return get_transform_matrix(angles, (0, 0, distance))
 
 
-def get_fit_image_matrix(target_image_size: Tuple[int, int],
-                         transform_matrix: np.ndarray,
-                         original_size: Tuple[int, int],
-                         extend_scale: float = 0.05) -> np.ndarray:
-    image_corners = [np.dot(transform_matrix, np.array(p, float)) for p in [[0, 0, 1],
-                                                                            [original_size[0], 0, 1],
-                                                                            [original_size[0], original_size[1], 1],
-                                                                            [0, original_size[1], 1]]]
+def get_affine_fit_image_matrix(input_image_size: Tuple[int, int],
+                                output_image_size: Tuple[int, int]) -> np.ndarray:
+    scale = max(output_image_size[0] / input_image_size[0], output_image_size[1] / input_image_size[1])
+    offset = ((output_image_size[0] - scale * input_image_size[0]) * 0.5,
+              (output_image_size[1] - scale * input_image_size[1]) * 0.5)
+    return np.array([[scale, 0, offset[0]],
+                     [0, scale, offset[1]]], float)
+
+
+def get_fit_transformed_image_matrix(input_image_size: Tuple[int, int],
+                                     output_image_size: Tuple[int, int],
+                                     transform_matrix: np.ndarray,
+                                     extend_scale: float = 0.05) -> np.ndarray:
+    image_corners = [np.dot(transform_matrix, np.array(p, float))
+                     for p in [[0, 0, 1], [input_image_size[0], 0, 1],
+                               [input_image_size[0], input_image_size[1], 1],  [0, input_image_size[1], 1]]]
     image_corners = [(v[0] / v[2], v[1] / v[2]) for v in image_corners]
 
     bb_min = [sys.float_info.max, sys.float_info.max]
@@ -78,13 +86,13 @@ def get_fit_image_matrix(target_image_size: Tuple[int, int],
         if corner[1] > bb_max[1]:
             bb_max[1] = corner[1]
 
-    scale = min(target_image_size[0] / (bb_max[0] - bb_min[0]), target_image_size[1] / (bb_max[1] - bb_min[1]))
+    scale = min(output_image_size[0] / (bb_max[0] - bb_min[0]), output_image_size[1] / (bb_max[1] - bb_min[1]))
     scale *= (1 - extend_scale)
 
     offset = (- bb_min[0] * scale, - bb_min[1] * scale)
 
-    borders = (target_image_size[0] - (bb_max[0] - bb_min[0]) * scale,
-               target_image_size[1] - (bb_max[1] - bb_min[1]) * scale)
+    borders = (output_image_size[0] - (bb_max[0] - bb_min[0]) * scale,
+               output_image_size[1] - (bb_max[1] - bb_min[1]) * scale)
 
     offset = (offset[0] + borders[0] * 0.5, offset[1] + borders[1] * 0.5)
 

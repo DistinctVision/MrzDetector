@@ -1,2 +1,4 @@
-dataset:
-  train_directory: D:\\datasets\\coco
+datasets:
+  coco:
+    train_directory: D:\\datasets\\coco\\train
+    val_directory: D:\\datasets\\coco\\val
