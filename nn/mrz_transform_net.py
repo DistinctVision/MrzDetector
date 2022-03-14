@@ -1,16 +1,19 @@
-from typing import Tuple
+from typing import Tuple, Union
+
+import numpy as np
 
 import torch
 
 from nn.blocks import ResLayer, BasicBlock
 from weight_init import constant_init, kaiming_init
+from mrz.transform import image_corners_to_homography
 
 
 class MrzTransformNet(torch.nn.Module):
     # it bases on ResNet18
 
     @staticmethod
-    def build_model(input_shape: Tuple[int, int]):
+    def build_model(input_shape: Tuple[int, int], device: Union[torch.device, str] = None):
         # TODO down sampling
 
         base_channels = 64
@@ -50,16 +53,31 @@ class MrzTransformNet(torch.nn.Module):
                                                         input_shape[0] * input_shape[1]),
                                         torch.nn.ReLU(inplace=True),
                                         torch.nn.Linear(input_shape[0] * input_shape[1], 8))
-        return torch.nn.Sequential(in_block, res_blocks, out_block)
 
-    def __init__(self, input_shape: Tuple[int, int]):
+        if device:
+            in_block.to(device)
+            res_blocks.to(device)
+            out_block.to(device)
+        return torch.nn.Sequential(in_block, res_blocks, out_block)
+    
+    @staticmethod
+    def create(input_shape: Tuple[int, int], mrz_code_image_size: Tuple[int, int]):
+        net = MrzTransformNet(input_shape, mrz_code_image_size)
+        net.model = MrzTransformNet.build_model()
+        return net
+
+    def __init__(self, input_shape: Tuple[int, int], mrz_code_image_size: Tuple[int, int]):
         super(MrzTransformNet, self).__init__()
         self._input_shape = input_shape
-        self._model = MrzTransformNet.build_model(self._input_shape)
+        self._mrz_code_image_size = mrz_code_image_size
 
     @property
     def input_shape(self) -> Tuple[int, int]:
         return self._input_shape
+
+    @property
+    def mrz_code_image_size(self) -> Tuple[int, int]:
+        return self._mrz_code_image_size
 
     def init_weights(self):
         for m in self.modules():
@@ -68,10 +86,17 @@ class MrzTransformNet(torch.nn.Module):
             elif isinstance(m, (torch.nn.modules.batchnorm._BatchNorm, torch.nn.GroupNorm)):
                 constant_init(m, 1)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> np.ndarray:
         x = self.in_block(x)
         x = self.res_blocks(x)
         x = self.out_block(x)
-        return x
+
+        x = list(x)
+        image_corners = [(x, y) for x, y in zip(x[0:8:1], x[1:8:1])]
+        matrix = image_corners_to_homography(image_corners, self._mrz_code_image_size)
+        return matrix
+
+
+
 
 

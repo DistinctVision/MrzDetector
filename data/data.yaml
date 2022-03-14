@@ -9,6 +9,11 @@ model:
   input_image_size:
     width: 640
     height: 480
-  mzt_code_image_size:
+  mrz_code_image_size:
     width: 490
     height: 60
+
+train:
+  batch_size: 4
+  learning_rate: 1e-4
+  epochs: 200

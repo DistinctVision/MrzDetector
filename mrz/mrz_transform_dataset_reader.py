@@ -8,13 +8,16 @@ import numpy as np
 from tqdm import tqdm
 
 
-class MztTransformDatasetReader(Iterable):
+class MrzTransformDatasetReader(Iterable):
     def __init__(self,
-                 dataset_directory_path: Union[Path, str]):
+                 dataset_directory_path: Union[Path, str],
+                 max_length: int = -1):
         self._image_paths = []
         for file in os.listdir(str(dataset_directory_path)):
             if file.endswith(".jpg") or file.endswith('.png'):
                 self._image_paths.append(dataset_directory_path / file)
+        if max_length > 0:
+            self._image_paths = self._image_paths[:max_length]
         self._read_labels()
         self._iter_index = -1
 
