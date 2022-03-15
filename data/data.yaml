@@ -2,10 +2,10 @@ datasets:
   coco:
     train:
       path: D:\\datasets\\coco\\train
-      max_size: -1
+      max_size: 5000
     val:
       path: D:\\datasets\\coco\\val
-      max_size: -1
+      max_size: 500
 
   temp_directory: temp
 

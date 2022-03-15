@@ -55,7 +55,7 @@ def epoch_iteration(model: torch.nn.Module,
     # Validation #
     ##############
     val_acc = test_model(model, val_data, loss_func, epoch)
-    print(f'\n[Epoch {epoch+1:2}] Training accuracy: {train_acc:03.4f}%, Validation accuracy: {val_acc:03.4f}%')
+    print(f'\n[Epoch {epoch+1:2}] Training accuracy: {train_acc:03.4f}, Validation accuracy: {val_acc:03.4f}')
     return train_acc, val_acc
 
 

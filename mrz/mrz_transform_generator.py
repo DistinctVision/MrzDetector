@@ -10,7 +10,7 @@ from tqdm import tqdm
 from mrz.transform import get_camera_matrix, get_look_transform, remove_z_axis, get_fit_transformed_image_matrix, \
     get_affine_fit_image_matrix, homography_to_image_corners, normalize_image_corners, denormalize_image_corners
 from mrz.mrz_transform_dataset_reader import MrzTransformDatasetReader
-from mrz.augmentations import gauss_noise, poison_noise, salt_pepper_noise, speckle_noise, gauss_blur
+from mrz.augmentations import gauss_noise, salt_pepper_noise, speckle_noise, gauss_blur
 
 
 class MrzTransformDatasetGenerator(Iterable):
@@ -31,7 +31,7 @@ class MrzTransformDatasetGenerator(Iterable):
 
         self._augmentations = None
         if enable_augmentations:
-            self._augmentations = [gauss_noise, poison_noise, salt_pepper_noise, speckle_noise]
+            self._augmentations = [gauss_noise, salt_pepper_noise, speckle_noise]
 
         self.mode = mode
 
@@ -178,7 +178,7 @@ def main_show():
         data_config = yaml.safe_load(stream)
 
     generator = MrzTransformDatasetGenerator(data_config['datasets']['coco']['train']['path'],
-                                             mode='matrix',
+                                             mode='corner_list',
                                              input_image_size=(data_config['model']['input_image_size']['width'],
                                                                data_config['model']['input_image_size']['height']),
                                              mrz_code_image_size=
@@ -186,11 +186,10 @@ def main_show():
                                               data_config['model']['mrz_code_image_size']['height']),
                                              max_size=int(data_config['datasets']['coco']['train']['max_size']))
 
-    for image, matrix in generator:
-        matrix /= matrix[2, 2]
-        image_corners = homography_to_image_corners(matrix, generator.mrz_code_image_size)
-        matrix1 = image_corners_to_homography(image_corners, generator.mrz_code_image_size)
-        matrix = matrix1
+    for image, corner_list in generator:
+        image_corners = [(x, y) for x, y in zip(corner_list[0:8:2], corner_list[1:8:2])]
+        image_corners = denormalize_image_corners(image_corners, generator.input_image_size)
+        matrix = image_corners_to_homography(image_corners, generator.mrz_code_image_size)
 
         unwarped_image = cv2.warpPerspective(image, np.linalg.inv(matrix), generator.mrz_code_image_size)
 
@@ -220,7 +219,8 @@ def main_prepare():
                              input_image_size=input_image_size,
                              mrz_code_image_size=mrz_code_image_size,
                              max_size=int(data_config['datasets']['coco']['val']['max_size']))
-    for image, image_corners in reader:
+    for image, corner_list in reader:
+        image_corners = [(x, y) for x, y in zip(corner_list[0:8:2], corner_list[1:8:2])]
         image_corners = denormalize_image_corners(image_corners, input_image_size)
         matrix = image_corners_to_homography(image_corners, mrz_code_image_size)
 
