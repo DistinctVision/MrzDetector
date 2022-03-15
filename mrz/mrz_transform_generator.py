@@ -10,6 +10,7 @@ from tqdm import tqdm
 from mrz.transform import get_camera_matrix, get_look_transform, remove_z_axis, get_fit_transformed_image_matrix, \
     get_affine_fit_image_matrix, homography_to_image_corners, normalize_image_corners, denormalize_image_corners
 from mrz.mrz_transform_dataset_reader import MrzTransformDatasetReader
+from mrz.augmentations import gauss_noise, poison_noise, salt_pepper_noise, speckle_noise, gauss_blur
 
 
 class MrzTransformDatasetGenerator(Iterable):
@@ -22,10 +23,15 @@ class MrzTransformDatasetGenerator(Iterable):
                  focal_length_range: Tuple[float, float] = (0.75, 1.6),
                  distance_range: Tuple[float, float] = (100, 1500),
                  ext_scale_range: Tuple[float, float] = (-0.1, 0.1),
-                 max_size: int = -1):
+                 max_size: int = -1,
+                 enable_augmentations: bool = True):
         dataset_directory_path = Path(dataset_directory_path).absolute()
         assert dataset_directory_path.is_dir(), f'Invalid path: {dataset_directory_path}'
         assert mode in {'matrix', 'corner_list'}, f'Invalid mode: {mode}'
+
+        self._augmentations = None
+        if enable_augmentations:
+            self._augmentations = [gauss_noise, poison_noise, salt_pepper_noise, speckle_noise]
 
         self.mode = mode
 
@@ -93,6 +99,14 @@ class MrzTransformDatasetGenerator(Iterable):
                 label_list.extend([x, y])
             labels = label_list
 
+        if self._augmentations:
+            blur_size = random.randint(0, 2)
+            if blur_size > 0:
+                image = gauss_blur(image, blur_size)
+
+            index_f = random.randint(0, len(self._augmentations) - 1)
+            image = self._augmentations[index_f](image)
+
         return image, labels
 
     def _generate_mzt_code_image(self,
@@ -146,10 +160,10 @@ def prepare_dataset(input_dataset_path: Union[Path, str],
         labels_path = output_dataset_path / f'{image_name}.txt'
         cv2.imwrite(str(image_path), image)
         with open(labels_path, 'w') as labels_file:
-            labels_str = f'{corners[0][0]} {corners[0][1]} ' \
-                         f'{corners[1][0]} {corners[1][1]} ' \
-                         f'{corners[2][0]} {corners[2][1]} ' \
-                         f'{corners[3][0]} {corners[3][1]}'
+            labels_str = f'{corners[0]} {corners[1]} ' \
+                         f'{corners[2]} {corners[3]} ' \
+                         f'{corners[4]} {corners[5]} ' \
+                         f'{corners[6]} {corners[7]}'
             labels_file.write(labels_str)
 
     return MrzTransformDatasetReader(output_dataset_path, max_size=max_size)
@@ -160,7 +174,7 @@ def main_show():
 
     from transform import homography_to_image_corners, image_corners_to_homography
 
-    with open(Path('../data') / 'data.yaml', 'r') as stream:
+    with open(Path('data') / 'data.yaml', 'r') as stream:
         data_config = yaml.safe_load(stream)
 
     generator = MrzTransformDatasetGenerator(data_config['datasets']['coco']['train']['path'],
@@ -193,7 +207,7 @@ def main_prepare():
     import yaml
     from transform import image_corners_to_homography
 
-    with open(Path('../data') / 'data.yaml', 'r') as stream:
+    with open(Path('data') / 'data.yaml', 'r') as stream:
         data_config = yaml.safe_load(stream)
 
     input_image_size = (data_config['model']['input_image_size']['width'],
@@ -222,5 +236,5 @@ def main_prepare():
 
 
 if __name__ == '__main__':
-    main_prepare()
-    # main_show()
+    # main_prepare()
+    main_show()
