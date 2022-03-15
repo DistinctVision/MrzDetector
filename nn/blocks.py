@@ -58,11 +58,13 @@ class BasicBlock(torch.nn.Module):
                  dilation: Union[int, Tuple[int, int]] = 1,
                  downsample=None):
         super(BasicBlock, self).__init__()
-        self.conv1 = torch.nn.Conv2d(in_channels, out_channels, stride=stride, dilation=dilation, kernel_size=(3, 3))
+        self.conv1 = torch.nn.Conv2d(in_channels, out_channels, stride=stride, dilation=dilation,
+                                     kernel_size=(3, 3), padding=dilation)
         self.bn1 = torch.nn.BatchNorm2d(out_channels)
-        self.relu = torhc.nn.ReLU(inplace=True)
-        self.conv2 = torch.nn.Conv2d(out_channels, out_channels, stride=(1, 1), dilation=(1, 1), kernel_size=(3, 3))
-        self.bn2 = torhc.nn.BatchNorm2d(out_channels)
+        self.relu = torch.nn.ReLU(inplace=True)
+        self.conv2 = torch.nn.Conv2d(out_channels, out_channels, stride=(1, 1), dilation=(1, 1),
+                                     kernel_size=(3, 3), padding=1)
+        self.bn2 = torch.nn.BatchNorm2d(out_channels)
         self.downsample = downsample
         self.stride = stride
         self.dilation = dilation
@@ -102,7 +104,8 @@ class Bottleneck(torch.nn.Module):
         # Both self.conv2 and self.downsample layers downsample the input when stride != 1
         self.conv1 = torch.nn.Conv2d(in_channels, width, kernel_size=(1, 1))
         self.bn1 = torch.nn.BatchNorm2d(width)
-        self.conv2 = torch.nn.Conv2d(width, width, kernel_size=(3, 3), stride=stride, dilation=dilation, groups=groups)
+        self.conv2 = torch.nn.Conv2d(width, width, kernel_size=(3, 3), stride=stride, dilation=dilation, groups=groups,
+                                     padding=dilation)
         self.bn2 = torch.nn.BatchNorm2d(width)
         self.conv3 = torch.nn.Conv2d(width, out_channels * self.expansion, kernel_size=(1, 1))
         self.bn3 = torch.nn.BatchNorm2d(out_channels * self.expansion)
@@ -151,10 +154,10 @@ class ResLayer(torch.nn.Sequential):
                 downsample.append(torch.nn.AvgPool2d(kernel_size=(stride, stride), stride=(stride, stride),
                                                      ceil_mode=True, count_include_pad=False))
             downsample.extend([
-                torch.nn.Conv2d(in_channels, out_channels * Bottleneck.expansion,
+                torch.nn.Conv2d(in_channels, out_channels * blockType.expansion,
                                 kernel_size=(1, 1), stride=(conv_stride, conv_stride),
                                 bias=False),
-                torch.nn.BatchNorm2d(out_channels * Bottleneck.expansion)
+                torch.nn.BatchNorm2d(out_channels * blockType.expansion)
             ])
             downsample = torch.nn.Sequential(*downsample)
 
@@ -162,7 +165,7 @@ class ResLayer(torch.nn.Sequential):
                             out_channels=out_channels,
                             stride=stride,
                             downsample=downsample)]
-        in_channels = out_channels * Bottleneck.expansion
+        in_channels = out_channels * blockType.expansion
         for i in range(1, num_blocks):
             layers.append(blockType(in_channels=in_channels,
                                     out_channels=out_channels,

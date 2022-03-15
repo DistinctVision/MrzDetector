@@ -3,8 +3,8 @@ from typing import Tuple, Union, Iterable
 
 import torch
 
-from mrz_transform_generator import MrzTransformDatasetGenerator
-from mrz_transform_dataset_reader import MrzTransformDatasetReader
+from mrz.mrz_transform_generator import MrzTransformDatasetGenerator
+from mrz.mrz_transform_dataset_reader import MrzTransformDatasetReader
 
 
 class MrzBatchCollector(Iterable):
@@ -29,6 +29,7 @@ class MrzBatchCollector(Iterable):
         return self._len
 
     def __iter__(self):
+        self._iter_index = -1
         return self
 
     def __next__(self) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -42,12 +43,14 @@ class MrzBatchCollector(Iterable):
         labels_list_batch = []
         offset_index = self._batch_size * self._iter_index
         for i in range(self._batch_size):
-            image, labels = self._data[offset_index + i]
+            image, labels = self._data[(offset_index + i) % self._len]
+            image = torch.Tensor(image).permute(2, 0, 1)
+            labels = torch.Tensor(labels)
             images_list_batch.append(image)
             labels_list_batch.append(labels)
         images_batch = torch.stack(images_list_batch)
         labels_batch = torch.stack(labels_list_batch)
         if self.device:
-            images_batch.to(self.device)
-            labels_batch.to(self.device)
+            images_batch = images_batch.to(self.device)
+            labels_batch = labels_batch.to(self.device)
         return images_batch, labels_batch

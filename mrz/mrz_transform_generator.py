@@ -7,9 +7,9 @@ import cv2
 
 from tqdm import tqdm
 
-from transform import get_camera_matrix, get_look_transform, remove_z_axis, get_fit_transformed_image_matrix, \
+from mrz.transform import get_camera_matrix, get_look_transform, remove_z_axis, get_fit_transformed_image_matrix, \
     get_affine_fit_image_matrix, homography_to_image_corners, normalize_image_corners, denormalize_image_corners
-from mrz_transform_dataset_reader import MrzTransformDatasetReader
+from mrz.mrz_transform_dataset_reader import MrzTransformDatasetReader
 
 
 class MrzTransformDatasetGenerator(Iterable):
@@ -22,10 +22,10 @@ class MrzTransformDatasetGenerator(Iterable):
                  focal_length_range: Tuple[float, float] = (0.75, 1.6),
                  distance_range: Tuple[float, float] = (100, 1500),
                  ext_scale_range: Tuple[float, float] = (-0.1, 0.1),
-                 max_length: int = -1):
+                 max_size: int = -1):
         dataset_directory_path = Path(dataset_directory_path).absolute()
         assert dataset_directory_path.is_dir(), f'Invalid path: {dataset_directory_path}'
-        assert mode in {'matrix', 'corners'}, f'Invalid mode: {mode}'
+        assert mode in {'matrix', 'corner_list'}, f'Invalid mode: {mode}'
 
         self.mode = mode
 
@@ -40,8 +40,8 @@ class MrzTransformDatasetGenerator(Iterable):
         for file in os.listdir(str(dataset_directory_path)):
             if file.endswith(".jpg") or file.endswith('.png'):
                 self._image_paths.append(dataset_directory_path / file)
-        if max_length > 0:
-            self._image_paths = self._image_paths[:max_length]
+        if max_size > 0:
+            self._image_paths = self._image_paths[:max_size]
         self._iter_index = -1
 
     @property
@@ -53,6 +53,7 @@ class MrzTransformDatasetGenerator(Iterable):
         return self._mrz_code_image_size
 
     def __iter__(self):
+        self._iter_index = -1
         return self
 
     def __next__(self) -> Union[Tuple[np.ndarray, np.ndarray], Tuple[np.ndarray, List[Tuple[float, float]]]]:
@@ -84,9 +85,14 @@ class MrzTransformDatasetGenerator(Iterable):
                                     dst=background, borderMode=cv2.BORDER_TRANSPARENT)
 
         labels = transform_matrix
-        if self.mode == 'corners':
+        if self.mode == 'corner_list':
             labels = homography_to_image_corners(transform_matrix, self._mrz_code_image_size)
             labels = normalize_image_corners(labels, self.input_image_size)
+            label_list = []
+            for x, y in labels:
+                label_list.extend([x, y])
+            labels = label_list
+
         return image, labels
 
     def _generate_mzt_code_image(self,
@@ -120,17 +126,19 @@ class MrzTransformDatasetGenerator(Iterable):
 def prepare_dataset(input_dataset_path: Union[Path, str],
                     output_dataset_path: Union[Path, str],
                     input_image_size: Tuple[int, int],
-                    mrz_code_image_size: Tuple[int, int]) -> MrzTransformDatasetReader:
+                    mrz_code_image_size: Tuple[int, int],
+                    max_size: int = -1) -> MrzTransformDatasetReader:
     input_dataset_path = Path(input_dataset_path)
     output_dataset_path = Path(output_dataset_path)
     if output_dataset_path.exists():
-        return MrzTransformDatasetReader(output_dataset_path)
+        return MrzTransformDatasetReader(output_dataset_path, max_size=max_size)
     output_dataset_path.mkdir(parents=True, exist_ok=True)
 
     generator = MrzTransformDatasetGenerator(input_dataset_path,
-                                             mode='corners',
+                                             mode='corner_list',
                                              input_image_size=input_image_size,
-                                             mrz_code_image_size=mrz_code_image_size)
+                                             mrz_code_image_size=mrz_code_image_size,
+                                             max_size=max_size)
 
     for index, (image, corners) in enumerate(tqdm(generator, f'The dataset preparing: {input_dataset_path}')):
         image_name = f'image_{index}'
@@ -144,7 +152,7 @@ def prepare_dataset(input_dataset_path: Union[Path, str],
                          f'{corners[3][0]} {corners[3][1]}'
             labels_file.write(labels_str)
 
-    return MrzTransformDatasetReader(output_dataset_path)
+    return MrzTransformDatasetReader(output_dataset_path, max_size=max_size)
 
 
 def main_show():
@@ -155,13 +163,14 @@ def main_show():
     with open(Path('../data') / 'data.yaml', 'r') as stream:
         data_config = yaml.safe_load(stream)
 
-    generator = MrzTransformDatasetGenerator(data_config['datasets']['coco']['train_directory'],
+    generator = MrzTransformDatasetGenerator(data_config['datasets']['coco']['train']['path'],
                                              mode='matrix',
                                              input_image_size=(data_config['model']['input_image_size']['width'],
                                                                data_config['model']['input_image_size']['height']),
                                              mrz_code_image_size=
                                              (data_config['model']['mrz_code_image_size']['width'],
-                                              data_config['model']['mrz_code_image_size']['height']))
+                                              data_config['model']['mrz_code_image_size']['height']),
+                                             max_size=int(data_config['datasets']['coco']['train']['max_size']))
 
     for image, matrix in generator:
         matrix /= matrix[2, 2]
@@ -192,10 +201,11 @@ def main_prepare():
     mrz_code_image_size = (data_config['model']['mrz_code_image_size']['width'],
                            data_config['model']['mrz_code_image_size']['height'])
 
-    reader = prepare_dataset(data_config['datasets']['coco']['val_directory'],
+    reader = prepare_dataset(data_config['datasets']['coco']['val']['path'],
                              data_config['datasets']['temp_directory'],
                              input_image_size=input_image_size,
-                             mrz_code_image_size=mrz_code_image_size)
+                             mrz_code_image_size=mrz_code_image_size,
+                             max_size=int(data_config['datasets']['coco']['val']['max_size']))
     for image, image_corners in reader:
         image_corners = denormalize_image_corners(image_corners, input_image_size)
         matrix = image_corners_to_homography(image_corners, mrz_code_image_size)

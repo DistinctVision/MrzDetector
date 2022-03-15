@@ -1,19 +1,23 @@
 datasets:
   coco:
-    train_directory: D:\\datasets\\coco\\train
-    val_directory: D:\\datasets\\coco\\val
+    train:
+      path: D:\\datasets\\coco\\train
+      max_size: 10
+    val:
+      path: D:\\datasets\\coco\\val
+      max_size: 5
 
   temp_directory: temp
 
 model:
   input_image_size:
-    width: 640
-    height: 480
+    width: 320
+    height: 240
   mrz_code_image_size:
     width: 490
     height: 60
 
 train:
-  batch_size: 4
+  batch_size: 2
   learning_rate: 1e-4
-  epochs: 200
+  epochs: 20

@@ -117,7 +117,8 @@ def homography_to_image_corners(matrix: np.ndarray, input_image_size: Tuple[int,
     return [(c[0] / c[2], c[1] / c[2]) for c in corners]
 
 
-def image_corners_to_homography(image_corners: List[Tuple[float, float]], input_image_size: Tuple[int, int]) -> np.ndarray:
+def image_corners_to_homography(image_corners: List[Tuple[float, float]],
+                                input_image_size: Tuple[int, int]) -> np.ndarray:
     """
     This is a implementation of DLT-algorithm: getting the transformation matrix from input / output coordinates.
     :param image_corners: output image corners after the perspective transformation
