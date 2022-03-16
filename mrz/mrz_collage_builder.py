@@ -41,6 +41,7 @@ class MrzCollageBuilder:
             model_input_image = torch.Tensor(image).to(self._device).permute(2, 0, 1).unsqueeze(0)
             corner_list = self._model(model_input_image)
             corner_list = corner_list.tolist()[0]
+            image_corners = [(x, y) for x, y in zip(corner_list[0:8:2], corner_list[1:8:2])]
             image_corners = denormalize_image_corners(image_corners, self._input_image_size)
             homography = image_corners_to_homography(image_corners, self._mrz_code_image_size)
             mzt_code_image = cv2.warpPerspective(image, np.linalg.inv(homography), self._mrz_code_image_size)
