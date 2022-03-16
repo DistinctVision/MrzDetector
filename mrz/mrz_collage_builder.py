@@ -44,7 +44,7 @@ class MrzCollageBuilder:
             image_corners = [(x, y) for x, y in zip(corner_list[0:8:2], corner_list[1:8:2])]
             image_corners = denormalize_image_corners(image_corners, self._input_image_size)
             homography = image_corners_to_homography(image_corners, self._mrz_code_image_size)
-            mzt_code_image = cv2.warpPerspective(image, homography, self._mrz_code_image_size)
+            mzt_code_image = cv2.warpPerspective(image, np.linalg.inv(homography), self._mrz_code_image_size)
             self._canvas[offset[1]:offset[1]+self._mrz_code_image_size[1],
                          offset[0]:offset[0]+self._mrz_code_image_size[0]] = mzt_code_image
         return self._canvas
