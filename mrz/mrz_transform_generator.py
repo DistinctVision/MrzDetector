@@ -7,6 +7,8 @@ import cv2
 
 from tqdm import tqdm
 
+from PIL import Image, ImageDraw, ImageFont
+
 from mrz.transform import get_camera_matrix, get_look_transform, remove_z_axis, get_fit_transformed_image_matrix, \
     get_affine_fit_image_matrix, homography_to_image_corners, normalize_image_corners, denormalize_image_corners
 from mrz.mrz_transform_dataset_reader import MrzTransformDatasetReader
@@ -23,12 +25,17 @@ class MrzTransformDatasetGenerator(Iterable):
                  limit_angles: Tuple[float, float, float] = (60, 60, 30),
                  focal_length_range: Tuple[float, float] = (0.75, 1.6),
                  distance_range: Tuple[float, float] = (100, 1500),
-                 ext_scale_range: Tuple[float, float] = (-0.1, 0.1),
+                 ext_scale_range: Tuple[float, float] = (-0.1, 0.3),
                  max_size: int = -1,
                  enable_augmentations: bool = True):
         dataset_directory_path = Path(dataset_directory_path).absolute()
         assert dataset_directory_path.is_dir(), f'Invalid path: {dataset_directory_path}'
         assert mode in {'matrix', 'corner_list'}, f'Invalid mode: {mode}'
+
+        self.fonts = [ImageFont.truetype(str(Path('data') / f'font1.ttf'), size=22),
+                      ImageFont.truetype(str(Path('data') / f'font2.ttf'), size=19),
+                      ImageFont.truetype(str(Path('data') / f'font3.ttf'), size=18),
+                      ImageFont.truetype(str(Path('data') / f'font4.ttf'), size=14)]
 
         self._augmentations = None
         if enable_augmentations:
@@ -121,22 +128,20 @@ class MrzTransformDatasetGenerator(Iterable):
                 self._codes.append((strs[0], strs[1]))
 
     def _generate_mzt_code_image(self,
-                                 border: Union[int, Tuple[int, int]] = (15, 5)) -> np.ndarray:
+                                 border: Union[int, Tuple[int, int]] = (20, 10)) -> np.ndarray:
         if isinstance(border, int):
             border = (border, border)
-        image = np.zeros((self._mrz_code_image_size[1], self._mrz_code_image_size[0], 3), dtype=np.uint8)
-        image[:, :] = (255, 255, 255)
-        code_strs = random.choice(self._codes)
-        font = random.choice([cv2.FONT_HERSHEY_TRIPLEX,
-                              cv2.FONT_ITALIC,
-                              cv2.FONT_HERSHEY_SIMPLEX,
-                              cv2.FONT_HERSHEY_COMPLEX,
-                              cv2.FONT_HERSHEY_DUPLEX])
-        font = random.choice([cv2.FONT_HERSHEY_SIMPLEX])
-        offset = random.randint(35, 55)
-        cv2.putText(image, code_strs[0], (border[0], border[1] + 20), font, 0.5, (0, 0, 0), 2)
-        cv2.putText(image, code_strs[1], (border[0], border[1] + offset), font, 0.5, (0, 0, 0), 2)
-        return image
+        codes_str = random.choice(self._codes)
+        codes_str = f'{codes_str[0]}\n{codes_str[1]}'
+        fnt = random.choice(self.fonts)
+        out = Image.new("RGB", self._mrz_code_image_size, (255, 255, 255))
+        draw_context = ImageDraw.Draw(out)
+        spacing = random.randint(3, 7)
+        draw_context.multiline_text((border[0], border[1]), codes_str, font=fnt, fill=(0, 0, 0), spacing=spacing)
+        out = np.array(out)
+        # Convert RGB to BGR
+        out = out[:, :, ::-1].copy()
+        return out
 
     def _generate_transform_matrix(self,
                                    focal_length: float,
@@ -165,6 +170,7 @@ def prepare_dataset(input_dataset_path: Union[Path, str],
     output_dataset_path.mkdir(parents=True, exist_ok=True)
 
     generator = MrzTransformDatasetGenerator(input_dataset_path,
+                                             codes_path=Path('data') / 'codes.txt',
                                              mode='corner_list',
                                              input_image_size=input_image_size,
                                              mrz_code_image_size=mrz_code_image_size,

@@ -100,6 +100,7 @@ def train():
                                       input_image_size, mrz_code_image_size,
                                       max_size=int(data_config['datasets']['coco']['val']['max_size']))
     train_data_generator = MrzTransformDatasetGenerator(data_config['datasets']['coco']['train']['path'],
+                                                        codes_path=Path('data') / 'codes.txt',
                                                         mode='corner_list',
                                                         input_image_size=input_image_size,
                                                         mrz_code_image_size=mrz_code_image_size,
