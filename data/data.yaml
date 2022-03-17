@@ -14,10 +14,17 @@ model:
     width: 320
     height: 240
   mrz_code_image_size:
-    width: 490
-    height: 60
+    width: 520
+    height: 70
 
 train:
   batch_size: 2
-  learning_rate: 1e-4
   epochs: 100
+
+  learning:
+    lr: 3e-5
+    betas: [0.9, 0.999]
+    eps: 1e-8
+
+collage:
+  size: 16

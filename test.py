@@ -9,7 +9,7 @@ from mrz import MrzTransformDatasetGenerator
 
 
 def main():
-    weights_path = Path('runs') / '03_15_2022__22_20_52' / 'model' / 'model_4.kpt'
+    weights_path = Path('..') / 'model_15.kpt'
 
     with open(Path('data') / 'data.yaml', 'r') as stream:
         data_config = yaml.safe_load(stream)

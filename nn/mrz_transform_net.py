@@ -50,9 +50,9 @@ class MrzTransformNet(torch.nn.Module):
                                         torch.nn.BatchNorm2d(2),
                                         torch.nn.ReLU(inplace=True),
                                         torch.nn.Flatten(),
-                                        torch.nn.Linear(out_size[0] * out_size[1] * 2, 32),
+                                        torch.nn.Linear(out_size[0] * out_size[1] * 2, 256),
                                         torch.nn.ReLU(inplace=True),
-                                        torch.nn.Linear(32, 8))
+                                        torch.nn.Linear(256, 8))
         if device:
             in_block.to(device)
             res_blocks.to(device)

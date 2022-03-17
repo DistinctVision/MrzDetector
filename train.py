@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Union, Dict, List
 from pathlib import Path
 
 from datetime import datetime
@@ -59,6 +59,18 @@ def epoch_iteration(model: torch.nn.Module,
     return train_acc, val_acc
 
 
+def dict_values_to_float(params: Dict[str, Union[str, List[str]]]) -> Dict[str, Union[float, List[float]]]:
+    out = {}
+    for key, value in params.items():
+        if isinstance(value, str):
+            out[key] = float(value)
+        elif isinstance(value, list):
+            out[key] = [float(list_item) for list_item in value]
+        else:
+            raise TypeError(f'Unexpected type {type(value)} for key {key}')
+    return out
+
+
 def train():
     import yaml
 
@@ -101,10 +113,13 @@ def train():
                                  device='cuda:0')
 
     loss = torch.nn.MSELoss()
-    optimizer = torch.optim.Adam(net.parameters(), lr=float(data_config['train']['learning_rate']))
+
+    learning_params = dict_values_to_float(data_config['train']['learning'])
+    optimizer = torch.optim.Adam(net.parameters(), **learning_params)
     epochs = data_config['train']['epochs']
 
-    collage_builder = MrzCollageBuilder(val_data_reader, net.model, 'cuda:0', input_image_size, mrz_code_image_size)
+    collage_builder = MrzCollageBuilder(val_data_reader, net.model, 'cuda:0', input_image_size, mrz_code_image_size,
+                                        size=int(data_config['collage']['size']))
 
     train_accs = []
     val_accs = []

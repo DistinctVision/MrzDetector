@@ -16,6 +16,7 @@ from mrz.augmentations import gauss_noise, salt_pepper_noise, speckle_noise, gau
 class MrzTransformDatasetGenerator(Iterable):
     def __init__(self,
                  dataset_directory_path: Union[Path, str],
+                 codes_path: Union[Path, str],
                  mode: str = 'matrix',
                  input_image_size: Tuple[int, int] = (640, 480),
                  mrz_code_image_size: Tuple[int, int] = (490, 60),
@@ -46,6 +47,9 @@ class MrzTransformDatasetGenerator(Iterable):
         for file in os.listdir(str(dataset_directory_path)):
             if file.endswith(".jpg") or file.endswith('.png'):
                 self._image_paths.append(dataset_directory_path / file)
+
+        self._read_codes(codes_path)
+
         if max_size > 0:
             self._image_paths = self._image_paths[:max_size]
         self._iter_index = -1
@@ -109,18 +113,29 @@ class MrzTransformDatasetGenerator(Iterable):
 
         return image, labels
 
+    def _read_codes(self, codes_path: Union[Path, str]):
+        self._codes = []
+        with open(codes_path, 'r') as file:
+            for line in file.readlines():
+                strs = line.strip().split(':')[:2]
+                self._codes.append((strs[0], strs[1]))
+
     def _generate_mzt_code_image(self,
                                  border: Union[int, Tuple[int, int]] = (15, 5)) -> np.ndarray:
         if isinstance(border, int):
             border = (border, border)
         image = np.zeros((self._mrz_code_image_size[1], self._mrz_code_image_size[0], 3), dtype=np.uint8)
         image[:, :] = (255, 255, 255)
-        code_strs = ['PLBRALEE<CHENG<<LIU<<<<<<<<<<<<<<<<<<<<<<',
-                     'LA000004<9TWN2002293M1511240<<<<<<<<<<<<<04']
-        cv2.putText(image, code_strs[0], (border[0], border[1] + 20),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2)
-        cv2.putText(image, code_strs[1], (border[0], border[1] + 40),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2)
+        code_strs = random.choice(self._codes)
+        font = random.choice([cv2.FONT_HERSHEY_TRIPLEX,
+                              cv2.FONT_ITALIC,
+                              cv2.FONT_HERSHEY_SIMPLEX,
+                              cv2.FONT_HERSHEY_COMPLEX,
+                              cv2.FONT_HERSHEY_DUPLEX])
+        font = random.choice([cv2.FONT_HERSHEY_SIMPLEX])
+        offset = random.randint(35, 55)
+        cv2.putText(image, code_strs[0], (border[0], border[1] + 20), font, 0.5, (0, 0, 0), 2)
+        cv2.putText(image, code_strs[1], (border[0], border[1] + offset), font, 0.5, (0, 0, 0), 2)
         return image
 
     def _generate_transform_matrix(self,
@@ -141,7 +156,8 @@ def prepare_dataset(input_dataset_path: Union[Path, str],
                     output_dataset_path: Union[Path, str],
                     input_image_size: Tuple[int, int],
                     mrz_code_image_size: Tuple[int, int],
-                    max_size: int = -1) -> MrzTransformDatasetReader:
+                    max_size: int = -1,
+                    codes_path: Union[Path, str] = Path('data') / 'codes.txt') -> MrzTransformDatasetReader:
     input_dataset_path = Path(input_dataset_path)
     output_dataset_path = Path(output_dataset_path)
     if output_dataset_path.exists():
@@ -178,6 +194,7 @@ def main_show():
         data_config = yaml.safe_load(stream)
 
     generator = MrzTransformDatasetGenerator(data_config['datasets']['coco']['train']['path'],
+                                             Path('data') / 'codes.txt',
                                              mode='corner_list',
                                              input_image_size=(data_config['model']['input_image_size']['width'],
                                                                data_config['model']['input_image_size']['height']),
