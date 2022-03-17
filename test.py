@@ -9,7 +9,7 @@ from mrz import MrzTransformDatasetGenerator
 
 
 def main():
-    weights_path = Path('..') / 'model_15.kpt'
+    weights_path = Path('data') / 'model.kpt'
 
     with open(Path('data') / 'data.yaml', 'r') as stream:
         data_config = yaml.safe_load(stream)
@@ -22,6 +22,7 @@ def main():
     net = MrzTransformNet.load(weights_path, input_image_size, mrz_code_image_size, 'cuda:0')
 
     generator = MrzTransformDatasetGenerator(data_config['datasets']['coco']['train']['path'],
+                                             codes_path=Path('data') / 'codes.txt',
                                              mode='corner_list',
                                              input_image_size=(data_config['model']['input_image_size']['width'],
                                                                data_config['model']['input_image_size']['height']),

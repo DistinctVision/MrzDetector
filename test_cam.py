@@ -9,7 +9,7 @@ from mrz import get_affine_fit_image_matrix
 
 
 def main():
-    weights_path = Path('runs') / '03_15_2022__22_20_52' / 'model' / 'model_4.kpt'
+    weights_path = Path('data') / 'model.kpt'
 
     with open(Path('data') / 'data.yaml', 'r') as stream:
         data_config = yaml.safe_load(stream)
